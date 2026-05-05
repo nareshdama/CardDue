@@ -1,0 +1,6 @@
+{
+  "name": "CardDue",
+  "description": "A productivity app for tracking credit card payments and balances",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
