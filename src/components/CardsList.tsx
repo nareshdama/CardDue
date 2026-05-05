@@ -83,29 +83,29 @@ const CardForm: React.FC<CardFormProps> = ({ initial, onCancel, onSubmit, submit
   const set = (k: keyof CardFormValues) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setValues(v => ({ ...v, [k]: e.target.value }));
 
-  const inputCls = "w-full bg-black/[0.03] border border-transparent rounded-xl px-4 py-3 mt-1 text-sm font-medium focus:outline-none focus:border-black/20 focus:bg-white transition-all";
+  const inputCls = "w-full bg-black/[0.03] border border-transparent rounded-xl px-3.5 py-3 mt-1 text-sm font-medium focus:outline-none focus:border-black/20 focus:bg-white transition-all";
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-6 md:p-8 rounded-[2rem] shadow-[0_8px_40px_-12px_rgba(0,0,0,0.08)] animate-in slide-in-from-top-2">
-      <div className="flex items-center justify-between mb-6">
+    <form onSubmit={handleSubmit} className="bg-white p-4 sm:p-6 md:p-8 rounded-[1.5rem] sm:rounded-[2rem] shadow-[0_8px_40px_-12px_rgba(0,0,0,0.08)] animate-in slide-in-from-top-2">
+      <div className="flex items-center justify-between mb-5">
         <h2 className="text-[10px] font-bold uppercase tracking-widest text-black/40">{submitLabel}</h2>
-        <button type="button" onClick={onCancel} className="text-black/40 hover:text-black"><X className="w-4 h-4" /></button>
+        <button type="button" onClick={onCancel} aria-label="Close form" className="text-black/40 hover:text-black p-2 -m-2"><X className="w-4 h-4" /></button>
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <input type="text" placeholder="Issuer (e.g. Chase)" required value={values.issuer} onChange={set('issuer')} className={`col-span-2 ${inputCls}`} />
-        <input type="text" placeholder="Card Name" required value={values.name} onChange={set('name')} className={`col-span-2 ${inputCls}`} />
+      <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-3 sm:gap-4">
+        <input type="text" placeholder="Issuer (e.g. Chase)" required value={values.issuer} onChange={set('issuer')} className={`min-[360px]:col-span-2 ${inputCls}`} />
+        <input type="text" placeholder="Card Name" required value={values.name} onChange={set('name')} className={`min-[360px]:col-span-2 ${inputCls}`} />
 
-        <div><label className="text-[10px] uppercase font-bold text-black/40 tracking-widest px-1">Balance $</label><input type="number" step="0.01" required value={values.balance} onChange={set('balance')} className={inputCls} /></div>
-        <div><label className="text-[10px] uppercase font-bold text-black/40 tracking-widest px-1">Limit $</label><input type="number" step="0.01" required value={values.creditLimit} onChange={set('creditLimit')} className={inputCls} /></div>
+        <div className="min-w-0"><label className="text-[10px] uppercase font-bold text-black/40 tracking-widest px-1">Balance $</label><input inputMode="decimal" type="number" step="0.01" required value={values.balance} onChange={set('balance')} className={inputCls} /></div>
+        <div className="min-w-0"><label className="text-[10px] uppercase font-bold text-black/40 tracking-widest px-1">Limit $</label><input inputMode="decimal" type="number" step="0.01" required value={values.creditLimit} onChange={set('creditLimit')} className={inputCls} /></div>
 
-        <div><label className="text-[10px] uppercase font-bold text-black/40 tracking-widest px-1">Statement Bal $</label><input type="number" step="0.01" value={values.statementBalance} onChange={set('statementBalance')} className={inputCls} /></div>
-        <div><label className="text-[10px] uppercase font-bold text-black/40 tracking-widest px-1">Min Pay $</label><input type="number" step="0.01" required value={values.minimumPayment} onChange={set('minimumPayment')} className={inputCls} /></div>
+        <div className="min-w-0"><label className="text-[10px] uppercase font-bold text-black/40 tracking-widest px-1">Stmt Bal $</label><input inputMode="decimal" type="number" step="0.01" value={values.statementBalance} onChange={set('statementBalance')} className={inputCls} /></div>
+        <div className="min-w-0"><label className="text-[10px] uppercase font-bold text-black/40 tracking-widest px-1">Min Pay $</label><input inputMode="decimal" type="number" step="0.01" required value={values.minimumPayment} onChange={set('minimumPayment')} className={inputCls} /></div>
 
-        <div><label className="text-[10px] uppercase font-bold text-black/40 tracking-widest px-1">Interest %</label><input type="number" step="0.01" value={values.interestRate} onChange={set('interestRate')} className={inputCls} /></div>
-        <div><label className="text-[10px] uppercase font-bold text-black/40 tracking-widest px-1">Due Date</label><input type="date" required value={values.dueDate} onChange={set('dueDate')} className={inputCls} /></div>
+        <div className="min-w-0"><label className="text-[10px] uppercase font-bold text-black/40 tracking-widest px-1">Interest %</label><input inputMode="decimal" type="number" step="0.01" value={values.interestRate} onChange={set('interestRate')} className={inputCls} /></div>
+        <div className="min-w-0"><label className="text-[10px] uppercase font-bold text-black/40 tracking-widest px-1">Due Date</label><input type="date" required value={values.dueDate} onChange={set('dueDate')} className={inputCls} /></div>
       </div>
       {error && <p className="mt-4 text-red-500 text-[10px] font-bold uppercase tracking-widest">{error}</p>}
-      <button type="submit" disabled={busy} className="w-full mt-6 bg-black text-white rounded-xl px-4 py-4 text-sm font-bold hover:bg-black/90 transition-transform active:scale-[0.98] disabled:opacity-60">
+      <button type="submit" disabled={busy} className="w-full mt-6 bg-black text-white rounded-xl px-4 py-4 text-sm font-bold hover:bg-black/90 transition-transform active:scale-[0.98] disabled:opacity-60 min-h-[48px]">
         {busy ? 'Saving…' : submitLabel}
       </button>
     </form>
@@ -213,31 +213,32 @@ export default function CardsList() {
           }
 
           return (
-            <div key={card.id} className={`bg-white rounded-[2rem] shadow-[0_8px_40px_-12px_rgba(0,0,0,0.06)] transition-all overflow-hidden ${isExpanded ? 'my-8 scale-[1.02]' : 'my-4'}`}>
+            <div key={card.id} className={`bg-white rounded-[2rem] shadow-[0_8px_40px_-12px_rgba(0,0,0,0.06)] transition-all overflow-hidden ${isExpanded ? 'my-6 sm:my-8 scale-[1.02]' : 'my-3 sm:my-4'}`}>
               <div
-                className="p-6 cursor-pointer flex items-center justify-between hover:bg-black/[0.01] transition-colors"
+                className="p-3.5 sm:p-6 cursor-pointer flex items-start sm:items-center justify-between gap-2 sm:gap-3 hover:bg-black/[0.01] transition-colors"
                 onClick={() => handleExpand(card.id)}
               >
-                <div className="flex items-center gap-5">
-                  <div className="w-12 h-12 bg-black rounded-full flex items-center justify-center text-[10px] text-white font-bold tracking-widest uppercase shrink-0">
+                <div className="flex items-center gap-3 sm:gap-5 min-w-0 flex-1">
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 bg-black rounded-full flex items-center justify-center text-[10px] text-white font-bold tracking-widest uppercase shrink-0">
                     {card.issuer.slice(0, 2)}
                   </div>
-                  <div>
-                    <h3 className="font-bold text-base text-black tracking-tight leading-none mb-1.5">{card.issuer} {card.name}</h3>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-sm sm:text-base text-black tracking-tight leading-tight mb-1 truncate">{card.issuer} {card.name}</h3>
                     <p className="text-[10px] text-black/40 font-bold tracking-widest uppercase">
                       Due {format(parseISO(card.dueDate), 'MMM d')}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <p className="text-base font-bold text-black tracking-tight leading-none mb-1.5">{formatCurrency(card.balance)}</p>
-                    <p className={`text-[10px] font-bold uppercase tracking-widest ${getStatusColor(status)}`}>
+                <div className="flex items-start sm:items-center gap-2 sm:gap-4 shrink-0 self-start sm:self-center">
+                  <div className="text-right min-w-0">
+                    <p className="text-sm sm:text-base font-bold text-black tracking-tight leading-none mb-1 tabular-nums">{formatCurrency(card.balance)}</p>
+                    <p className={`text-[10px] font-bold uppercase tracking-widest truncate ${getStatusColor(status)}`}>
                       {status.replace('_', ' ')}
                     </p>
                   </div>
                   {status !== 'PAID' && card.minimumPayment > 0 && (
                     <button
+                      aria-label={`Quick pay minimum ${formatCurrency(card.minimumPayment)}`}
                       title={`Quick Pay Minimum (${formatCurrency(card.minimumPayment)})`}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -252,36 +253,37 @@ export default function CardsList() {
               </div>
 
               {isExpanded && (
-                <div className="px-6 pb-6 pt-0 animate-in slide-in-from-top-2 duration-300">
-                  <div className="grid grid-cols-2 gap-y-6 gap-x-8 mb-8 mt-2 md:pl-[68px]">
-                    <div>
+                <div className="px-4 sm:px-6 pb-5 sm:pb-6 pt-0 animate-in slide-in-from-top-2 duration-300">
+                  <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-y-4 sm:gap-y-6 gap-x-4 sm:gap-x-8 mb-6 sm:mb-8 mt-2 md:pl-[68px]">
+                    <div className="min-w-0">
                       <p className="text-[10px] text-black/40 uppercase tracking-widest font-bold mb-1">Due Date</p>
-                      <p className="text-sm font-bold text-black">{format(parseISO(card.dueDate), 'MMM d, yyyy')}</p>
+                      <p className="text-sm font-bold text-black truncate">{format(parseISO(card.dueDate), 'MMM d, yyyy')}</p>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[10px] text-black/40 uppercase tracking-widest font-bold mb-1">Min Payment</p>
-                      <p className="text-sm font-bold text-black">{formatCurrency(card.minimumPayment)}</p>
+                      <p className="text-sm font-bold text-black truncate">{formatCurrency(card.minimumPayment)}</p>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[10px] text-black/40 uppercase tracking-widest font-bold mb-1">Utilization</p>
                       <p className="text-sm font-bold text-black">{calculateUtilization(card.balance, card.creditLimit)}%</p>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[10px] text-black/40 uppercase tracking-widest font-bold mb-1">Statement Bal</p>
-                      <p className="text-sm font-bold text-black">{formatCurrency(card.statementBalance)}</p>
+                      <p className="text-sm font-bold text-black truncate">{formatCurrency(card.statementBalance)}</p>
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-3 pt-6 border-t border-black/[0.03]">
+                  <div className="flex flex-col gap-3 pt-5 sm:pt-6 border-t border-black/[0.03]">
                     {balanceMode ? (
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <input
+                          inputMode="decimal"
                           type="number"
                           step="0.01"
                           placeholder="New balance"
                           value={balanceDraft}
                           onChange={e => setBalanceDraft(e.target.value)}
-                          className="flex-1 bg-black/[0.03] border border-transparent rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:border-black/20 focus:bg-white transition-all"
+                          className="flex-1 min-w-0 bg-black/[0.03] border border-transparent rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:border-black/20 focus:bg-white transition-all"
                           autoFocus
                         />
                         <button
@@ -297,33 +299,34 @@ export default function CardsList() {
                               setBalanceMode(false);
                             });
                           }}
-                          className="bg-black text-white px-5 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-black/90 transition-transform active:scale-95"
+                          className="bg-black text-white px-5 py-3 rounded-xl text-sm font-bold hover:bg-black/90 transition-transform active:scale-95 min-h-[44px]"
                         >
                           Save
                         </button>
                         <button
                           onClick={() => { setBalanceMode(false); setBalanceDraft(''); }}
-                          className="bg-black/[0.05] text-black px-4 py-3 rounded-xl text-sm font-bold"
+                          className="bg-black/[0.05] text-black px-4 py-3 rounded-xl text-sm font-bold min-h-[44px]"
                         >
                           Cancel
                         </button>
                       </div>
                     ) : (
                       <>
-                        <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 sm:grid-cols-[1fr_auto_auto_auto] gap-2">
                           <input
+                            inputMode="decimal"
                             type="number"
                             step="0.01"
                             placeholder="Amount"
                             value={actionAmount}
                             onChange={(e) => setActionAmount(e.target.value)}
-                            className="sm:flex-1 w-full bg-black/[0.03] border border-transparent rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:border-black/20 focus:bg-white transition-all"
+                            className="min-[360px]:col-span-2 sm:col-span-1 bg-black/[0.03] border border-transparent rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:border-black/20 focus:bg-white transition-all min-w-0"
                           />
                           <input
                             type="date"
                             value={actionDate}
                             onChange={(e) => setActionDate(e.target.value)}
-                            className="sm:w-auto w-full bg-black/[0.03] border border-transparent rounded-xl px-3 py-3 text-sm font-medium focus:outline-none focus:border-black/20 focus:bg-white transition-all"
+                            className="min-[360px]:col-span-2 sm:col-span-1 bg-black/[0.03] border border-transparent rounded-xl px-3 py-3 text-sm font-medium focus:outline-none focus:border-black/20 focus:bg-white transition-all min-w-0"
                           />
                           <button
                             onClick={() => {
@@ -338,7 +341,7 @@ export default function CardsList() {
                                 setExpandedCardId(null);
                               });
                             }}
-                            className="bg-black text-white px-5 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-black/90 transition-transform active:scale-95"
+                            className="bg-black text-white px-4 sm:px-5 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-black/90 transition-transform active:scale-95 min-h-[44px]"
                           >
                             <Check className="w-4 h-4" /> Pay
                           </button>
@@ -355,30 +358,30 @@ export default function CardsList() {
                                 setExpandedCardId(null);
                               });
                             }}
-                            className="bg-blue-500 text-white px-5 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-blue-600 transition-transform active:scale-95"
+                            className="bg-blue-500 text-white px-4 sm:px-5 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-blue-600 transition-transform active:scale-95 min-h-[44px]"
                           >
                             <Calendar className="w-4 h-4" /> Schedule
                           </button>
                         </div>
 
-                        <div className="flex flex-wrap gap-2 justify-between">
-                          <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2 justify-start sm:justify-between">
+                          <div className="flex flex-wrap gap-2">
                             <button
                               onClick={() => { setBalanceMode(true); setBalanceDraft(String(card.balance)); }}
-                              className="bg-black/[0.05] text-black px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-black/[0.1] transition-colors"
+                              className="bg-black/[0.05] text-black px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-black/[0.1] transition-colors min-h-[36px]"
                             >
                               Update Balance
                             </button>
                             <button
                               onClick={() => { setEditingCardId(card.id); setExpandedCardId(null); }}
-                              className="bg-black/[0.05] text-black px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-black/[0.1] transition-colors"
+                              className="bg-black/[0.05] text-black px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-black/[0.1] transition-colors min-h-[36px]"
                             >
                               <Edit3 className="w-3 h-3" /> Edit
                             </button>
                           </div>
                           {confirmDeleteId === card.id ? (
-                            <div className="flex gap-2 items-center">
-                              <span className="text-red-500 font-bold text-xs mr-1">Are you sure?</span>
+                            <div className="flex flex-wrap gap-2 items-center">
+                              <span className="text-red-500 font-bold text-xs mr-1 w-full sm:w-auto">Are you sure?</span>
                               <button
                                 onClick={() =>
                                   runAction('Delete', async () => {
@@ -386,13 +389,13 @@ export default function CardsList() {
                                     setConfirmDeleteId(null);
                                   })
                                 }
-                                className="bg-red-500 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-600 active:scale-95"
+                                className="bg-red-500 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-red-600 active:scale-95 min-h-[36px]"
                               >
                                 Yes
                               </button>
                               <button
                                 onClick={() => setConfirmDeleteId(null)}
-                                className="bg-black/10 text-black px-4 py-2 rounded-xl text-xs font-bold"
+                                className="bg-black/10 text-black px-4 py-2 rounded-xl text-xs font-bold min-h-[36px]"
                               >
                                 Cancel
                               </button>
@@ -400,7 +403,7 @@ export default function CardsList() {
                           ) : (
                             <button
                               onClick={() => setConfirmDeleteId(card.id)}
-                              className="text-red-500 bg-red-500/10 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-red-500 hover:text-white transition-all active:scale-95"
+                              className="text-red-500 bg-red-500/10 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-red-500 hover:text-white transition-all active:scale-95 min-h-[36px]"
                             >
                               <Trash2 className="w-3 h-3" /> Remove
                             </button>
