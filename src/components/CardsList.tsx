@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../hooks/useStore';
-import { formatCurrency, calculateUtilization } from '../lib/utils';
-import { format, parseISO } from 'date-fns';
+import { formatCurrency, calculateUtilization, effectiveDueDate } from '../lib/utils';
+import { format, parseISO, addMonths } from 'date-fns';
 import { Check, Calendar, Edit3, Plus, Trash2, X } from 'lucide-react';
 import { CreditCard as CardType } from '../types';
 
@@ -113,7 +113,7 @@ const CardForm: React.FC<CardFormProps> = ({ initial, onCancel, onSubmit, submit
 }
 
 export default function CardsList() {
-  const { cards, getCardStatus, markPaid, markScheduled, updateBalance, addCard, updateCard, deleteCard } = useStore();
+  const { cards, activities, getCardStatus, markPaid, markScheduled, markBounced, updateBalance, addCard, updateCard, deleteCard } = useStore();
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
@@ -124,6 +124,17 @@ export default function CardsList() {
   const [actionDate, setActionDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [balanceDraft, setBalanceDraft] = useState<string>('');
   const [balanceMode, setBalanceMode] = useState<boolean>(false);
+  const [rolloverCardId, setRolloverCardId] = useState<string | null>(null);
+  const [rolloverDraft, setRolloverDraft] = useState({ statementBalance: '', minimumPayment: '', dueDate: '' });
+
+  const recentBounceCount = (cardId: string): number => {
+    const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+    return activities.filter(a =>
+      a.cardId === cardId &&
+      a.type === 'AUTOPAY_BOUNCED' &&
+      parseISO(a.date).getTime() >= cutoff
+    ).length;
+  };
 
   const handleExpand = (id: string) => {
     if (expandedCardId === id) {
@@ -148,7 +159,10 @@ export default function CardsList() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'OVERDUE': return 'text-red-500';
+      case 'OVERDUE':
+      case 'MISSED':
+        return 'text-red-500';
+      case 'AT_RISK': return 'text-amber-600';
       case 'DUE_SOON': return 'text-amber-500';
       case 'UPCOMING': return 'text-black/40';
       case 'SCHEDULED': return 'text-blue-500';
@@ -223,9 +237,16 @@ export default function CardsList() {
                     {card.issuer.slice(0, 2)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-bold text-sm sm:text-base text-black tracking-tight leading-tight mb-1 truncate">{card.issuer} {card.name}</h3>
+                    <h3 className="font-bold text-sm sm:text-base text-black tracking-tight leading-tight mb-1 truncate">
+                      {card.issuer} {card.name}
+                      {recentBounceCount(card.id) > 0 && (
+                        <span title="Recent autopay bounce" className="ml-2 align-middle inline-block text-[9px] font-bold tracking-widest uppercase text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
+                          ↩ {recentBounceCount(card.id)}
+                        </span>
+                      )}
+                    </h3>
                     <p className="text-[10px] text-black/40 font-bold tracking-widest uppercase">
-                      Due {format(parseISO(card.dueDate), 'MMM d')}
+                      Due {format(parseISO(effectiveDueDate(card)), 'MMM d')}{card.minimumPayment > 0 ? ` · Min ${formatCurrency(card.minimumPayment)}` : ''}
                     </p>
                   </div>
                 </div>
@@ -236,7 +257,7 @@ export default function CardsList() {
                       {status.replace('_', ' ')}
                     </p>
                   </div>
-                  {status !== 'PAID' && card.minimumPayment > 0 && (
+                  {status !== 'PAID' && status !== 'AT_RISK' && status !== 'MISSED' && card.minimumPayment > 0 && (
                     <button
                       aria-label={`Quick pay minimum ${formatCurrency(card.minimumPayment)}`}
                       title={`Quick Pay Minimum (${formatCurrency(card.minimumPayment)})`}
@@ -257,7 +278,7 @@ export default function CardsList() {
                   <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-y-4 sm:gap-y-6 gap-x-4 sm:gap-x-8 mb-6 sm:mb-8 mt-2 md:pl-[68px]">
                     <div className="min-w-0">
                       <p className="text-[10px] text-black/40 uppercase tracking-widest font-bold mb-1">Due Date</p>
-                      <p className="text-sm font-bold text-black truncate">{format(parseISO(card.dueDate), 'MMM d, yyyy')}</p>
+                      <p className="text-sm font-bold text-black truncate">{format(parseISO(effectiveDueDate(card)), 'MMM d, yyyy')}</p>
                     </div>
                     <div className="min-w-0">
                       <p className="text-[10px] text-black/40 uppercase tracking-widest font-bold mb-1">Min Payment</p>
@@ -312,6 +333,80 @@ export default function CardsList() {
                       </div>
                     ) : (
                       <>
+                        {status === 'PAID' ? (
+                          rolloverCardId === card.id ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto_auto] gap-2">
+                              <input inputMode="decimal" type="number" step="0.01" placeholder="Statement bal" value={rolloverDraft.statementBalance} onChange={e => setRolloverDraft(d => ({ ...d, statementBalance: e.target.value }))} className="bg-black/[0.03] rounded-xl px-3 py-3 text-sm font-medium focus:outline-none focus:bg-white min-w-0" />
+                              <input inputMode="decimal" type="number" step="0.01" placeholder="Min payment" value={rolloverDraft.minimumPayment} onChange={e => setRolloverDraft(d => ({ ...d, minimumPayment: e.target.value }))} className="bg-black/[0.03] rounded-xl px-3 py-3 text-sm font-medium focus:outline-none focus:bg-white min-w-0" />
+                              <input type="date" value={rolloverDraft.dueDate} onChange={e => setRolloverDraft(d => ({ ...d, dueDate: e.target.value }))} className="bg-black/[0.03] rounded-xl px-3 py-3 text-sm font-medium focus:outline-none focus:bg-white min-w-0" />
+                              <button
+                                onClick={() => {
+                                  const sb = parseFloat(rolloverDraft.statementBalance);
+                                  const mp = parseFloat(rolloverDraft.minimumPayment);
+                                  if (!rolloverDraft.dueDate || Number.isNaN(sb) || Number.isNaN(mp) || sb < 0 || mp < 0) {
+                                    setActionError('Enter statement balance, minimum, and due date.');
+                                    return;
+                                  }
+                                  runAction('New statement', async () => {
+                                    await updateCard(card.id, { statementBalance: sb, minimumPayment: mp, dueDate: rolloverDraft.dueDate });
+                                    setRolloverCardId(null);
+                                    setRolloverDraft({ statementBalance: '', minimumPayment: '', dueDate: '' });
+                                  });
+                                }}
+                                className="bg-black text-white px-4 py-3 rounded-xl text-sm font-bold min-h-[44px]"
+                              >Save</button>
+                              <button onClick={() => setRolloverCardId(null)} className="bg-black/[0.05] text-black px-4 py-3 rounded-xl text-sm font-bold min-h-[44px]">Cancel</button>
+                            </div>
+                          ) : (
+                            <div className="bg-green-500/10 text-green-700 rounded-xl px-4 py-3 text-xs font-bold uppercase tracking-widest flex items-center justify-between gap-3">
+                              <span>✓ Paid · next due {format(addMonths(parseISO(effectiveDueDate(card)), 1), 'MMM d')}</span>
+                              <button
+                                onClick={() => { setRolloverCardId(card.id); setRolloverDraft({ statementBalance: String(card.statementBalance), minimumPayment: String(card.minimumPayment), dueDate: format(addMonths(parseISO(effectiveDueDate(card)), 1), 'yyyy-MM-dd') }); }}
+                                className="text-green-800 underline-offset-2 hover:underline"
+                              >New statement</button>
+                            </div>
+                          )
+                        ) : status === 'SCHEDULED' ? (
+                          <div className="bg-blue-500/10 text-blue-700 rounded-xl px-4 py-3 text-xs font-bold uppercase tracking-widest">
+                            Payment scheduled — confirm here once it clears
+                          </div>
+                        ) : status === 'AT_RISK' || status === 'MISSED' ? (
+                          <div className="space-y-3">
+                            <p className={`text-xs font-medium ${status === 'MISSED' ? 'text-red-700' : 'text-amber-700'}`}>
+                              Autopay due {format(parseISO(effectiveDueDate(card)), 'MMM d')} — did it clear in your bank?
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                onClick={() => {
+                                  const amt = card.autopayCustomAmount && card.autopayStatus === 'CUSTOM'
+                                    ? card.autopayCustomAmount
+                                    : card.autopayStatus === 'STATEMENT' ? card.statementBalance
+                                    : card.autopayStatus === 'FULL' ? card.balance
+                                    : card.minimumPayment;
+                                  runAction('Confirm cleared', async () => {
+                                    await markPaid(card.id, amt);
+                                    setExpandedCardId(null);
+                                  });
+                                }}
+                                className="bg-green-600 text-white px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-green-700 transition-transform active:scale-95 min-h-[44px]"
+                              >
+                                <Check className="w-4 h-4" /> Cleared
+                              </button>
+                              <button
+                                onClick={() => runAction('Mark bounced', () => markBounced(card.id))}
+                                className="bg-red-600 text-white px-4 py-3 rounded-xl text-xs font-bold hover:bg-red-700 transition-transform active:scale-95 min-h-[44px]"
+                              >
+                                Bounced
+                              </button>
+                              <button
+                                onClick={() => setExpandedCardId(null)}
+                                className="bg-black/[0.05] text-black px-4 py-3 rounded-xl text-xs font-bold min-h-[44px]"
+                              >
+                                Not sure
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
                         <div className="grid grid-cols-1 min-[360px]:grid-cols-2 sm:grid-cols-[1fr_auto_auto_auto] gap-2">
                           <input
                             inputMode="decimal"
@@ -363,6 +458,7 @@ export default function CardsList() {
                             <Calendar className="w-4 h-4" /> Schedule
                           </button>
                         </div>
+                        )}
 
                         <div className="flex flex-wrap gap-2 justify-start sm:justify-between">
                           <div className="flex flex-wrap gap-2">

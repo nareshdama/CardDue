@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import { CreditCard, Activity, ActionRequired } from '../types';
-import { differenceInDays, parseISO, addMonths, subMonths, formatISO } from 'date-fns';
-import { calculateUtilization } from '../lib/utils';
+import { CreditCard, Activity, ActionRequired, CardStatus } from '../types';
+import { differenceInDays, parseISO, subMonths, formatISO } from 'date-fns';
+import { calculateUtilization, effectiveDueDate } from '../lib/utils';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { encryptData, decryptData } from '../lib/crypto';
+import { sendLocalNotification } from '../lib/notifications';
+
+const NOTIFIED_ALERTS_KEY = 'carddue-notified-alerts';
 
 interface AppState {
   cards: CreditCard[];
@@ -16,10 +19,11 @@ interface AppState {
   deleteCard: (id: string) => Promise<void>;
   markPaid: (cardId: string, amount: number) => Promise<void>;
   markScheduled: (cardId: string, amount: number, date: string) => Promise<void>;
+  markBounced: (cardId: string) => Promise<void>;
   updateBalance: (cardId: string, newBalance: number) => Promise<void>;
   addActivity: (activity: Omit<Activity, 'id' | 'date' | 'createdAt' | 'userId'>) => Promise<void>;
   dismissAlert: (alertId: string) => void;
-  getCardStatus: (card: CreditCard) => 'OVERDUE' | 'DUE_SOON' | 'UPCOMING' | 'SCHEDULED' | 'PAID';
+  getCardStatus: (card: CreditCard) => CardStatus;
 }
 
 const StoreContext = createContext<AppState | null>(null);
@@ -31,19 +35,19 @@ const newId = () =>
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2) + Date.now().toString(36);
 
-// Returns the start of the current billing cycle: one month before dueDate.
-// Activities within this window count as "this cycle".
-function cycleStart(card: CreditCard): Date {
-  return subMonths(parseISO(card.dueDate), 1);
+function findCycleActivity(card: CreditCard, activities: Activity[], type: Activity['type']) {
+  const cycleDue = effectiveDueDate(card);
+  // Anchored window for legacy activities written before cycleDueDate existed.
+  const legacyStartMs = subMonths(parseISO(cycleDue), 1).getTime();
+  return activities.find(a => {
+    if (a.cardId !== card.id || a.type !== type) return false;
+    if (a.cycleDueDate) return a.cycleDueDate === cycleDue;
+    return parseISO(a.date).getTime() >= legacyStartMs;
+  });
 }
 
-function findCycleActivity(card: CreditCard, activities: Activity[], type: Activity['type']) {
-  const startMs = cycleStart(card).getTime();
-  return activities.find(a =>
-    a.cardId === card.id &&
-    a.type === type &&
-    parseISO(a.date).getTime() >= startMs
-  );
+function hasAutopay(card: CreditCard): boolean {
+  return card.autopayStatus !== 'OFF';
 }
 
 function generateAlerts(cards: CreditCard[], activities: Activity[]): ActionRequired[] {
@@ -51,28 +55,64 @@ function generateAlerts(cards: CreditCard[], activities: Activity[]): ActionRequ
   const today = new Date();
 
   cards.forEach(card => {
-    const dueDate = parseISO(card.dueDate);
+    const dueDate = parseISO(effectiveDueDate(card));
     const diffDays = differenceInDays(dueDate, today);
 
-    const handled =
-      findCycleActivity(card, activities, 'PAYMENT_PAID') ||
-      findCycleActivity(card, activities, 'PAYMENT_SCHEDULED');
+    const paid = findCycleActivity(card, activities, 'PAYMENT_PAID');
+    const scheduled = findCycleActivity(card, activities, 'PAYMENT_SCHEDULED');
+    const handled = paid || scheduled;
 
     if (!handled) {
-      if (diffDays < 0) {
-        alerts.push({
-          id: `alert-overdue-${card.id}`,
-          cardId: card.id,
-          type: 'OVERDUE',
-          message: `Action Required: Your ${card.issuer} payment is OVERDUE.`
-        });
-      } else if (diffDays <= 3) {
-        alerts.push({
-          id: `alert-due-${card.id}`,
-          cardId: card.id,
-          type: 'DUE_TOMORROW',
-          message: `Action Required: Your ${card.issuer} payment is due ${diffDays === 0 ? 'today' : 'in ' + diffDays + ' day' + (diffDays === 1 ? '' : 's')}.`
-        });
+      if (hasAutopay(card)) {
+        // Autopay-aware nudges. The whole point is catching the silent
+        // bounce: issuer attempts the deduction, bank lacks funds, fee
+        // hits days later. We surface verification at the moments where
+        // the user can still act.
+        if (diffDays === 1) {
+          alerts.push({
+            id: `alert-autopay-tomorrow-${card.id}`,
+            cardId: card.id,
+            type: 'AUTOPAY_TOMORROW',
+            message: `${card.issuer} autopay runs tomorrow. Confirm your bank has enough to cover it — a bounce stacks a returned-payment fee on top of the late fee.`
+          });
+        } else if (diffDays === 0) {
+          alerts.push({
+            id: `alert-autopay-verify-${card.id}`,
+            cardId: card.id,
+            type: 'AUTOPAY_VERIFY',
+            message: `${card.issuer} autopay runs today. Check your bank later and confirm here once the deduction posts.`
+          });
+        } else if (diffDays < 0 && diffDays >= -3) {
+          alerts.push({
+            id: `alert-autopay-atrisk-${card.id}`,
+            cardId: card.id,
+            type: 'AUTOPAY_AT_RISK',
+            message: `${card.issuer} autopay was due ${-diffDays} day${diffDays === -1 ? '' : 's'} ago and isn't confirmed. Verify it cleared — if it bounced, you have a short window to pay manually before the late fee posts.`
+          });
+        } else if (diffDays < -3) {
+          alerts.push({
+            id: `alert-overdue-${card.id}`,
+            cardId: card.id,
+            type: 'OVERDUE',
+            message: `Action Required: ${card.issuer} autopay is unconfirmed and ${-diffDays} days past due. Likely missed — check the issuer.`
+          });
+        }
+      } else {
+        if (diffDays < 0) {
+          alerts.push({
+            id: `alert-overdue-${card.id}`,
+            cardId: card.id,
+            type: 'OVERDUE',
+            message: `Action Required: Your ${card.issuer} payment is OVERDUE.`
+          });
+        } else if (diffDays <= 3) {
+          alerts.push({
+            id: `alert-due-${card.id}`,
+            cardId: card.id,
+            type: 'DUE_TOMORROW',
+            message: `Action Required: Your ${card.issuer} payment is due ${diffDays === 0 ? 'today' : 'in ' + diffDays + ' day' + (diffDays === 1 ? '' : 's')}.`
+          });
+        }
       }
     }
 
@@ -145,6 +185,32 @@ export function StoreProvider({ children, encryptionKey, onDecryptFailure }: { c
   const alerts = useMemo(() => {
     return generateAlerts(cards, activities).filter(a => !dismissedAlerts.has(a.id));
   }, [cards, activities, dismissedAlerts]);
+
+  // Fire OS push notifications for any alerts the user hasn't been pinged
+  // about yet. Tracked by alert id so we don't re-spam on every render.
+  useEffect(() => {
+    if (alerts.length === 0) return;
+    let notified: Set<string>;
+    try {
+      const raw = localStorage.getItem(NOTIFIED_ALERTS_KEY);
+      notified = raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+      notified = new Set();
+    }
+    let changed = false;
+    alerts.forEach(a => {
+      if (notified.has(a.id)) return;
+      sendLocalNotification('CardDue', { body: a.message, tag: a.id });
+      notified.add(a.id);
+      changed = true;
+    });
+    // Prune ids whose alert is gone so re-occurrences next cycle re-notify.
+    const live = new Set(alerts.map(a => a.id));
+    notified.forEach(id => {
+      if (!live.has(id)) { notified.delete(id); changed = true; }
+    });
+    if (changed) localStorage.setItem(NOTIFIED_ALERTS_KEY, JSON.stringify([...notified]));
+  }, [alerts]);
 
   // Drop dismissals whose underlying alert no longer exists, so an alert that
   // returns next cycle can show up again instead of being permanently silenced.
@@ -219,17 +285,19 @@ export function StoreProvider({ children, encryptionKey, onDecryptFailure }: { c
   const markPaid = async (cardId: string, amount: number) => {
     const card = cards.find(c => c.id === cardId);
     if (!card) return;
-    // Subtract the payment and roll dueDate forward one month so the next
-    // cycle is tracked correctly.
-    const nextDue = formatISO(addMonths(parseISO(card.dueDate), 1), { representation: 'date' });
+    // Idempotency: if this cycle is already confirmed paid, ignore. This is
+    // what kills the n-click bug — extra clicks on Quick Pay no longer
+    // subtract the minimum repeatedly.
+    if (findCycleActivity(card, activities, 'PAYMENT_PAID')) return;
+    const cycleDue = effectiveDueDate(card);
     await updateCard(cardId, {
       balance: Math.max(0, card.balance - amount),
-      dueDate: nextDue,
     });
     await addActivity({
       cardId,
       type: 'PAYMENT_PAID',
       amount,
+      cycleDueDate: cycleDue,
       text: `${card.issuer} marked as paid: $${amount}`
     });
   };
@@ -237,11 +305,26 @@ export function StoreProvider({ children, encryptionKey, onDecryptFailure }: { c
   const markScheduled = async (cardId: string, amount: number, date: string) => {
     const card = cards.find(c => c.id === cardId);
     if (!card) return;
+    if (findCycleActivity(card, activities, 'PAYMENT_SCHEDULED')) return;
+    const cycleDue = effectiveDueDate(card);
     await addActivity({
       cardId,
       type: 'PAYMENT_SCHEDULED',
       amount,
+      cycleDueDate: cycleDue,
       text: `${card.issuer} payment scheduled for ${date}`
+    });
+  };
+
+  const markBounced = async (cardId: string) => {
+    const card = cards.find(c => c.id === cardId);
+    if (!card) return;
+    const cycleDue = effectiveDueDate(card);
+    await addActivity({
+      cardId,
+      type: 'AUTOPAY_BOUNCED',
+      cycleDueDate: cycleDue,
+      text: `${card.issuer} autopay bounced — pay manually to limit late/returned-payment fees`
     });
   };
 
@@ -266,15 +349,23 @@ export function StoreProvider({ children, encryptionKey, onDecryptFailure }: { c
     });
   };
 
-  const getCardStatus = (card: CreditCard) => {
+  const getCardStatus = (card: CreditCard): CardStatus => {
     const paidThisCycle = findCycleActivity(card, activities, 'PAYMENT_PAID');
     if (paidThisCycle) return 'PAID';
     const scheduledThisCycle = findCycleActivity(card, activities, 'PAYMENT_SCHEDULED');
     if (scheduledThisCycle) return 'SCHEDULED';
 
     const today = new Date();
-    const dueDate = parseISO(card.dueDate);
+    const dueDate = parseISO(effectiveDueDate(card));
     const diffDays = differenceInDays(dueDate, today);
+
+    // Autopay-aware: once the deduction date arrives without a user
+    // confirmation, the card sits in AT_RISK — could have cleared or
+    // bounced, app doesn't know. Past the grace window, treat as MISSED.
+    if (hasAutopay(card)) {
+      if (diffDays <= 0 && diffDays >= -3) return 'AT_RISK';
+      if (diffDays < -3) return 'MISSED';
+    }
 
     if (diffDays < 0) return 'OVERDUE';
     if (diffDays <= 7) return 'DUE_SOON';
@@ -292,6 +383,7 @@ export function StoreProvider({ children, encryptionKey, onDecryptFailure }: { c
       deleteCard,
       markPaid,
       markScheduled,
+      markBounced,
       updateBalance,
       addActivity,
       dismissAlert,

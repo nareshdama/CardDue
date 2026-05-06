@@ -1,6 +1,6 @@
 import React from 'react';
 import { useStore } from '../hooks/useStore';
-import { formatCurrency, calculateUtilization } from '../lib/utils';
+import { formatCurrency, calculateUtilization, effectiveDueDate } from '../lib/utils';
 import { format, parseISO, isPast, isToday, differenceInDays } from 'date-fns';
 import { AlertCircle, Lightbulb } from 'lucide-react';
 
@@ -18,20 +18,20 @@ export default function Dashboard({ onTabChange }: { onTabChange: (tab: 'dashboa
   // For simplicity, we sum the minimum payment of all cards that are OVERDUE, DUE_SOON, or UPCOMING
   const unpaidCards = cards.filter(card => {
     const status = getCardStatus(card);
-    return ['OVERDUE', 'DUE_SOON', 'UPCOMING'].includes(status);
+    return ['OVERDUE', 'DUE_SOON', 'UPCOMING', 'AT_RISK', 'MISSED'].includes(status);
   });
   
   const minimumDue = unpaidCards.reduce((sum, card) => sum + card.minimumPayment, 0);
 
   // Find next due date
   const sortedByDueDate = [...unpaidCards].sort((a, b) => {
-    return parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime();
+    return parseISO(effectiveDueDate(a)).getTime() - parseISO(effectiveDueDate(b)).getTime();
   });
-  
+
   const nextCardDue = sortedByDueDate[0];
   let nextDueText = 'None';
   if (nextCardDue) {
-    const date = parseISO(nextCardDue.dueDate);
+    const date = parseISO(effectiveDueDate(nextCardDue));
     if (isToday(date)) nextDueText = 'Today';
     else if (isPast(date)) nextDueText = 'Overdue';
     else {
@@ -60,13 +60,13 @@ export default function Dashboard({ onTabChange }: { onTabChange: (tab: 'dashboa
         <div className="space-y-3 md:col-span-12">
           {alerts.map(alert => (
             <div key={alert.id} className={`p-3 sm:p-4 rounded-xl flex items-start gap-2 sm:gap-3 ${
-              alert.type === 'OVERDUE' ? 'bg-red-50 text-red-900 border border-red-100' :
-              alert.type === 'DUE_TOMORROW' ? 'bg-amber-50 text-amber-900 border border-amber-100' :
+              alert.type === 'OVERDUE' || alert.type === 'AUTOPAY_AT_RISK' ? 'bg-red-50 text-red-900 border border-red-100' :
+              alert.type === 'DUE_TOMORROW' || alert.type === 'AUTOPAY_TOMORROW' || alert.type === 'AUTOPAY_VERIFY' ? 'bg-amber-50 text-amber-900 border border-amber-100' :
               'bg-blue-50 text-blue-900 border border-blue-100'
             }`}>
               <AlertCircle className={`w-5 h-5 shrink-0 mt-0.5 ${
-                alert.type === 'OVERDUE' ? 'text-red-500' :
-                alert.type === 'DUE_TOMORROW' ? 'text-amber-500' :
+                alert.type === 'OVERDUE' || alert.type === 'AUTOPAY_AT_RISK' ? 'text-red-500' :
+                alert.type === 'DUE_TOMORROW' || alert.type === 'AUTOPAY_TOMORROW' || alert.type === 'AUTOPAY_VERIFY' ? 'text-amber-500' :
                 'text-blue-500'
               }`} />
               <div className="flex-1 min-w-0">
